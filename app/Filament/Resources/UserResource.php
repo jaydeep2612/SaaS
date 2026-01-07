@@ -60,12 +60,21 @@ class UserResource extends Resource
 
                 // 3. Role Dropdown
                 Forms\Components\Select::make('role')
-                    ->options([
-                        'admin' => 'Admin',
-                        'manager' => 'Manager',
-                        'chef' => 'Chef',
-                        'waiter' => 'Waiter',
-                    ])
+                    ->options(function () {
+                        // 1. Define roles that EVERYONE (Managers) can assign
+                        $roles = [
+                            'manager' => 'Manager',
+                            'chef' => 'Chef',
+                            'waiter' => 'Waiter',
+                        ];
+
+                        // 2. If the logged-in user is SUPER ADMIN, add 'Admin' to the list
+                        if (auth()->user()->role === 'super_admin') {
+                            $roles = ['admin' => 'Admin'] + $roles; // Adds 'Admin' to the top
+                        }
+
+                        return $roles;
+                    })
                     ->required(),
 
                 // 4. Restaurant Selection

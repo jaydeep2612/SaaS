@@ -79,4 +79,31 @@ class CategoriesResource extends Resource
             'edit' => Pages\EditCategories::route('/{record}/edit'),
         ];
     }
+    public static function canViewAny(): bool
+    {
+       $user = Auth::user();
+        return in_array($user->role, ['admin', 'manager']);
+    }
+    public static function getEloquentQuery(): Builder
+    {
+        // 1. Get the standard list of orders from the database
+        $query = parent::getEloquentQuery();
+
+        // 2. Check who is logged in
+        $user = Auth::user();
+
+        // 3. If no one is logged in, show nothing (Safety check)
+        if (! $user) {
+            return $query->whereRaw('1 = 0'); 
+        }
+
+        // 4. If I am the SUPER ADMIN, stop here. Show me everything.
+        if ($user->role === 'super_admin') {
+            return $query;
+        }
+
+        // 5. If I am a NORMAL USER (Manager/Waiter), apply the filter.
+        // "Show orders WHERE restaurant_id matches MY restaurant_id"
+        return $query->where('restaurant_id', $user->restaurant_id);
+    }
 }
