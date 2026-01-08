@@ -6,6 +6,7 @@ use App\Filament\Resources\RestaurantsResource\Pages;
 use App\Filament\Resources\RestaurantsResource\RelationManagers;
 use App\Models\Restaurant;
 use Filament\Forms;
+use Illuminate\Support\Str;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
@@ -26,9 +27,13 @@ class RestaurantsResource extends Resource
             ->schema([
                 
                 // 1. Restaurant Name
-                Forms\Components\TextInput::make('name')
+                 Forms\Components\TextInput::make('name')
+                    ->label('Restaurant Name')
                     ->required()
-                    ->maxLength(255),
+                    ->live() // IMPORTANT for dynamic filename
+                    ->reactive(),
+
+                
 
                 // 2. Email (Unique)
                 Forms\Components\TextInput::make('email')
@@ -38,8 +43,18 @@ class RestaurantsResource extends Resource
 
                 // 3. Logo Upload (Simple image uploader)
                 Forms\Components\FileUpload::make('logo')
-                    ->directory('restaurant-logos') // Folders inside storage/app/public
-                    ->image(),
+                    ->label('Restaurant Logo')
+                    ->image()
+                    ->disk('public')
+                    ->directory(fn ($get) =>
+                        'restaurants/' . Str::slug($get('name'))
+                    )
+                    ->getUploadedFileNameForStorageUsing(
+                        fn ($file, $get) =>
+                            Str::slug($get('name')) . '.' . $file->getClientOriginalExtension()
+                    )
+                    ->imageEditor()
+                    ->required(),
 
                 // 4. User Limit (Number only)
                 Forms\Components\TextInput::make('user_limit')

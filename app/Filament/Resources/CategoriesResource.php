@@ -28,12 +28,9 @@ class CategoriesResource extends Resource
                 Forms\Components\TextInput::make('name')
                     ->required(),
 
-                
                 Forms\Components\Toggle::make('is_active')
                     ->default(true)
                     ->required(),
-
-                
 
                 Forms\Components\Hidden::make('restaurant_id')
                 ->default(Auth::user()->restaurant_id),

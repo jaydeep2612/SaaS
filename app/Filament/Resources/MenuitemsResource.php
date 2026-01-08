@@ -13,6 +13,9 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Illuminate\Support\Facades\Auth; // 👈 Don't forget this!
+use Illuminate\Support\Str;
+use App\Models\Category;
+use App\Models\Restaurant;
 
 class MenuitemsResource extends Resource
 {
@@ -45,50 +48,85 @@ class MenuitemsResource extends Resource
     {
         return $form
             ->schema([
-                Forms\Components\Select::make('restaurant_id')
-                    ->relationship('restaurant', 'name')
-                    ->visible(fn () => auth()->user()->role === 'super_admin')
-                    ->required(fn () => auth()->user()->role === 'super_admin'),
 
-                // 2. Category Selection
-                // We use a query filter so Manager A doesn't see Manager B's categories
-                Forms\Components\Select::make('category_id')
-                    ->label('Category')
-                    ->relationship('category', 'name', function (Builder $query) {
-                        // If not Super Admin, show only MY categories
-                        if (auth()->user()->role !== 'super_admin') {
-                            return $query->where('restaurant_id', auth()->user()->restaurant_id);
-                        }
-                        return $query;
-                    })
-                    ->required()
-                    ->searchable()
-                    ->preload(),
+    // 1️⃣ Restaurant (Super Admin only)
+    Forms\Components\Select::make('restaurant_id')
+        ->relationship('restaurant', 'name')
+        ->visible(fn () => auth()->user()->role === 'super_admin')
+        ->required(fn () => auth()->user()->role === 'super_admin')
+        ->live()
+        ->reactive(),
 
-                // 3. Basic Details
-                Forms\Components\TextInput::make('name')
-                    ->required()
-                    ->maxLength(255),
+    // 2️⃣ Category (Filtered by Restaurant)
+    Forms\Components\Select::make('category_id')
+        ->label('Category')
+        ->relationship(
+            'category',
+            'name',
+            fn (Builder $query, callable $get) =>
+                auth()->user()->role === 'super_admin'
+                    ? $query->where('restaurant_id', $get('restaurant_id'))
+                    : $query->where('restaurant_id', auth()->user()->restaurant_id)
+        )
+        ->required()
+        ->searchable()
+        ->preload()
+        ->live()
+        ->reactive(),
 
-                
+    // 3️⃣ Item Name
+    Forms\Components\TextInput::make('name')
+        ->required()
+        ->maxLength(255)
+        ->live()
+        ->reactive(),
 
-                Forms\Components\TextInput::make('price')
-                    ->numeric()
-                    ->prefix('₹') // or your currency symbol
-                    ->required(),
+    // 4️⃣ Price
+    Forms\Components\TextInput::make('price')
+        ->numeric()
+        ->prefix('₹')
+        ->required(),
 
-                // 4. Image Upload
-                Forms\Components\FileUpload::make('image')
-                    ->directory('menu-items')
-                    ->image(),
+    // 5️⃣ IMAGE UPLOAD (🔥 MAIN PART)
+    Forms\Components\FileUpload::make('image')
+        ->label('Item Image')
+        ->image()
+        ->disk('public')
+        ->directory(function (callable $get) {
 
-                // 5. Availability Toggle
-                Forms\Components\Toggle::make('is_available')
-                    ->label('Available Now')
-                    ->default(true),
-                Forms\Components\Hidden::make('restaurant_id')
-                ->default(Auth::user()->restaurant_id),
-            ]);
+            $restaurant = Restaurant::find(
+                $get('restaurant_id') ?? Auth::user()->restaurant_id
+            );
+
+            $category = Category::find($get('category_id'));
+
+            if (! $restaurant || ! $category) {
+                return 'temp';
+            }
+
+            return
+                'restaurants/' .
+                Str::slug($restaurant->name) .
+                '/categories/' .
+                Str::slug($category->name);
+        })
+        ->getUploadedFileNameForStorageUsing(
+            fn ($file, callable $get) =>
+                Str::slug($get('name')) . '.' . $file->getClientOriginalExtension()
+        )
+        ->required(),
+
+    // 6️⃣ Availability
+    Forms\Components\Toggle::make('is_available')
+        ->label('Available Now')
+        ->default(true),
+
+    // 7️⃣ Hidden restaurant_id (for non-super-admin)
+    Forms\Components\Hidden::make('restaurant_id')
+        ->default(Auth::user()->restaurant_id)
+        ->visible(fn () => auth()->user()->role !== 'super_admin'),
+]);
+
     }
 
     public static function table(Table $table): Table
