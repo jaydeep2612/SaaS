@@ -193,7 +193,23 @@ public static function updateGrandTotal(Forms\Get $get, Forms\Set $set): void
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
+                Tables\Actions\Action::make('start_cooking')
+                    ->label('Start Cooking')
+                    ->icon('heroicon-m-fire')
+                    ->color('warning')
+                    ->button()
+                    ->visible(fn (Order $record) => in_array(strtolower($record->status), ['placed', 'pending']))
+                    ->action(fn (Order $record) => $record->update(['status' => 'preparing'])),
+                    
+                Tables\Actions\Action::make('mark_ready')
+                    ->label('Order Ready')
+                    ->icon('heroicon-m-check-circle')
+                    ->color('success')
+                    ->button()
+                    ->visible(fn (Order $record) => strtolower($record->status) === 'preparing')
+                    ->action(fn (Order $record) => $record->update(['status' => 'ready'])),
             ])
+            ->poll('5s')
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\DeleteBulkAction::make(),
