@@ -192,6 +192,7 @@ public static function updateGrandTotal(Forms\Get $get, Forms\Set $set): void
                 //
             ])
             ->actions([
+                Tables\Actions\ViewAction::make(),
                 Tables\Actions\EditAction::make(),
                 Tables\Actions\Action::make('start_cooking')
                     ->label('Start Cooking')
