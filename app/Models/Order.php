@@ -13,7 +13,7 @@ use App\Models\OrderItem;
 class Order extends Model
 {
     protected $fillable = [
-        'restaurant_id', 'table_id', 'total_amount', 'status', 'created_by'
+        'restaurant_id', 'table_id', 'total_amount', 'status', 'created_by', 'customer_name'
     ];
 
     // 👇 Auto-stamp Restaurant ID and Creator ID

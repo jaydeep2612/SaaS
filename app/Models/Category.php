@@ -5,7 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth; // 👈 Don't forget this import!
 use Illuminate\Database\Eloquent\Relations\BelongsTo; // 👈 Import this
-
+use Illuminate\Database\Eloquent\Relations\HasMany; // 👈 1. Import this
 class Category extends Model
 {
     protected $fillable = ['name', 'restaurant_id'];
@@ -21,5 +21,9 @@ class Category extends Model
     public function restaurant(): BelongsTo
     {
         return $this->belongsTo(Restaurant::class);
+    }
+    public function menuItems(): HasMany
+    {
+        return $this->hasMany(MenuItem::class);
     }
 }

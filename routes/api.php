@@ -2,7 +2,14 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Api\WaiterController;
+use App\Http\Controllers\Api\CustomerController;
 
-Route::get('/user', function (Request $request) {
-    return $request->user();
-})->middleware('auth:sanctum');
+// Public routes (No login required for customers)
+Route::get('/customer/menu/{restaurantId}', [CustomerController::class, 'getMenu']);
+Route::post('/customer/order', [CustomerController::class, 'placeOrder']);
+Route::post('/waiter/login', [WaiterController::class, 'login']);
+Route::get('/waiter/orders', [WaiterController::class, 'getReadyOrders']);
+Route::post('/waiter/order/{id}/serve', [WaiterController::class, 'markServed']);
+
+Route::get('/user', function (Request $request) {    return $request->user(); })->middleware('auth:sanctum');

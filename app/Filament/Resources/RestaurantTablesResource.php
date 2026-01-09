@@ -24,34 +24,20 @@ class RestaurantTablesResource extends Resource
     {
         return $form
             ->schema([
-                // 1. Only Super Admin sees this dropdown
-                Forms\Components\Select::make('restaurant_id')
-                    ->relationship('restaurant', 'name')
-                    ->visible(fn () => auth()->user()->role === 'super_admin')
-                    ->required(fn () => auth()->user()->role === 'super_admin'),
 
-                // 2. Table Name (e.g. "Table 5")
-                Forms\Components\TextInput::make('table_number')
-                    ->required()
-                    ->numeric()
-                    ->maxLength(255),
+        // Restaurant (Super Admin only)
+        Forms\Components\Select::make('restaurant_id')
+            ->relationship('restaurant', 'name')
+            ->visible(fn () => auth()->user()->role === 'super_admin')
+            ->required(fn () => auth()->user()->role === 'super_admin'),
 
-                // 3. Capacity
-                // Forms\Components\TextInput::make('capacity')
-                //     ->numeric()
-                //     ->default(4)
-                //     ->required(),
-
-                // // 4. Status (Color coded in table view later)
-                // Forms\Components\Select::make('status')
-                //     ->options([
-                //         'available' => 'Available',
-                //         'occupied' => 'Occupied',
-                //         'reserved' => 'Reserved',
-                //     ])
-                //     ->default('available')
-                //     ->required(),
-            ]);
+        // TOTAL TABLES INPUT
+        Forms\Components\TextInput::make('total_tables')
+            ->label('Total Tables')
+            ->numeric()
+            ->minValue(1)
+            ->required(),
+    ]);
     }
 
     public static function table(Table $table): Table

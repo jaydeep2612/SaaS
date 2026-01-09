@@ -4,127 +4,143 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\KitchenResource\Pages;
 use App\Models\Order;
-use Filament\Forms;
-use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Auth; 
 
 class KitchenResource extends Resource
 {
     protected static ?string $model = Order::class;
 
-    protected static ?string $navigationIcon = 'heroicon-o-tv'; // TV Icon
-    protected static ?string $navigationLabel = 'Kitchen Display';
-    protected static ?string $navigationGroup = 'Kitchen Management';
-    protected static ?int $navigationSort = 1;
+    protected static ?string $navigationLabel = 'Kitchen Dashboard';
+    protected static ?string $navigationIcon = 'heroicon-o-fire';
 
-    // 🚫 1. Disable "Create" button (Chefs don't create orders)
-    public static function canCreate(): bool
+    /**
+     * Optimized Query:
+     * 1. Loads relationships (Category & Items) to prevent "N+1" performance issues.
+     * 2. Filters by Status (Only Placed & Preparing).
+     * 3. Filters by Restaurant (Security).
+     */
+    public static function getEloquentQuery(): Builder
     {
-       return false;
-    }
+        $query = parent::getEloquentQuery();
 
-    public static function form(Form $form): Form
-    {
-        return $form->schema([]); // Empty form since we don't edit here
+        // 1. Filter Status & Eager Load Data
+        $query->whereIn('status', ['placed', 'preparing'])
+              ->with(['items.menuItem.category']) // 👈 Pre-load category data
+              ->orderBy('created_at', 'asc');
+
+        // 2. Security Logic
+        $user = Auth::user();
+
+        if (! $user) {
+            return $query->whereRaw('1 = 0'); // Show nothing if guest
+        }
+
+        if ($user->role === 'super_admin') {
+            return $query; // Super Admin sees all
+        }
+
+        // Chef/Manager sees only their restaurant
+        return $query->where('restaurant_id', $user->restaurant_id);
     }
 
     public static function table(Table $table): Table
-{
-    return $table
-        ->poll('5s')
-        
-        // 🔲 Grid Layout
-        ->contentGrid([
-            'md' => 2,
-            'xl' => 3,
-        ])
-        
-        // 🔍 Query & Optimization
-        ->modifyQueryUsing(function (Builder $query) {
-            return $query
-                ->where('restaurant_id', auth()->user()->restaurant_id)
-                ->whereIn('status', ['placed', 'pending', 'preparing'])
-                ->orderBy('created_at', 'asc')
-                // 🚀 Optimize: Pre-load all relationships to prevent slowness
-                ->with(['items.menuItem.category', 'table']); 
-        })
+    {
+        return $table
+            // Auto-refresh every 5 seconds
+            ->poll('5s')
+            
+            // Grid Layout: 1 card on mobile, 2 on tablet, 3 on desktop
+            ->contentGrid([
+                'md' => 2,
+                'xl' => 3,
+            ])
+            
+            ->columns([
+                Tables\Columns\Layout\Stack::make([
+                    // --- CARD HEADER: Table & Time ---
+                    Tables\Columns\Layout\Split::make([
+                        Tables\Columns\TextColumn::make('table_id')
+                            ->formatStateUsing(fn ($state) => "Table {$state}")
+                            ->weight('bold')
+                            ->size(Tables\Columns\TextColumn\TextColumnSize::Large)
+                            ->color('primary'),
 
-        // 🏗️ CARD LAYOUT (Stack)
-        ->columns([
-            \Filament\Tables\Columns\Layout\Stack::make([
-                
-                // 1. TOP: Table Number & Timer
-                Tables\Columns\TextColumn::make('table.table_number')
-                    ->label('Table')
-                    ->size(Tables\Columns\TextColumn\TextColumnSize::Large)
-                    ->weight('bold')
-                    ->formatStateUsing(fn ($state, Order $record) => "Table {$state} • #{$record->id}")
-                    ->description(fn (Order $record) => $record->created_at->diffForHumans()),
+                        Tables\Columns\TextColumn::make('created_at')
+                            ->since()
+                            ->color('gray')
+                            ->alignRight(),
+                    ]),
 
-                // 2. MIDDLE: Custom Food List (Qty x Name + Category)
-                Tables\Columns\TextColumn::make('items_list')
-                    ->label('Items')
-                    ->state(function (Order $record) {
-                        // Loop through every item in the order
-                        return $record->items->map(function ($item) {
-                            // Format: "2 x Burger (Main Course)"
-                            $qty = $item->quantity;
-                            $name = $item->menuItem->name;
-                            $cat = $item->menuItem->category->name ?? 'No Category';
-                            
-                            // HTML String
-                            return "<div class='py-1'>
-                                        <span class='font-bold text-primary-500'>{$qty}x</span> 
-                                        <span>{$name}</span> 
-                                        <span class='text-gray-400 text-xs'>({$cat})</span>
-                                    </div>";
-                        })->implode(''); // Join them all together
-                    })
-                    ->html() // ⚠️ REQUIRED: Tells Filament to render the HTML tags
-                    ->extraAttributes(['class' => 'py-2']), // Add spacing
+                    // --- CUSTOMER NAME ---
+                    Tables\Columns\TextColumn::make('customer_name')
+                        ->icon('heroicon-m-user')
+                        ->weight('medium')
+                        ->color('gray'),
 
-                // 3. BOTTOM: Status Badge
-                Tables\Columns\TextColumn::make('status')
-                    ->badge()
-                    ->color(fn (string $state): string => match (strtolower($state)) {
-                        'placed', 'pending' => 'gray',
-                        'preparing' => 'warning',
-                        'ready' => 'success',
-                        default => 'gray',
-                    }),
-            ])->space(3),
-        ])
-        
-        // 👇 ACTIONS (Buttons at the bottom)
-        ->actions([
-            Tables\Actions\Action::make('start_cooking')
-                ->label('Start Cooking')
-                ->icon('heroicon-m-fire')
-                ->color('warning')
-                ->button()
-                ->authorize(true)
-                ->visible(fn (Order $record) => in_array(strtolower($record->status), ['placed', 'pending']))
-                ->action(fn (Order $record) => $record->update(['status' => 'preparing'])),
+                    // --- ORDER ITEMS (Qty + Name + Category) ---
+                    // --- ORDER ITEMS (Guaranteed New Lines) ---
+                    Tables\Columns\TextColumn::make('order_summary')
+                        ->label('Order Items')
+                        ->state(function (Order $record) {
+                            // 1. Loop through items
+                            return $record->items->map(function ($item) {
+                                $qty = $item->quantity;
+                                $name = $item->menuItem->name ?? 'Unknown';
+                                $category = $item->menuItem->category->name ?? '-';
+                                
+                                // 2. Create the bullet line manually
+                                // Example: "• 2x Burger (Main)"
+                                return "&bull; <strong>{$qty}x {$name}</strong> <span class='text-gray-500 text-xs'>({$category})</span>";
+                            })->join('<br>'); // 3. Join with an HTML break tag
+                        })
+                        ->html() // 👈 THIS IS THE KEY. It enables the HTML tags above.
+                        ->color('gray'),
 
-            Tables\Actions\Action::make('mark_ready')
-                ->label('Order Ready')
-                ->icon('heroicon-m-check-circle')
-                ->color('success')
-                ->button()
-                ->authorize(true)
-                ->visible(fn (Order $record) => strtolower($record->status) === 'preparing')
-                ->action(fn (Order $record) => $record->update(['status' => 'ready'])),
-        ]);
-}
+                    // --- STATUS BADGE ---
+                    Tables\Columns\TextColumn::make('status')
+                        ->badge()
+                        ->color(fn (string $state): string => match ($state) {
+                            'placed' => 'danger',
+                            'preparing' => 'warning',
+                            'ready' => 'success',
+                            default => 'gray',
+                        }),
+                ])->space(3),
+            ])
+            ->actions([
+                // Button: Start Cooking
+                Tables\Actions\Action::make('start_cooking')
+                    ->label('Cook')
+                    ->icon('heroicon-o-fire')
+                    ->color('warning')
+                    ->button()
+                    ->visible(fn (Order $record) => $record->status === 'placed')
+                    ->action(fn (Order $record) => $record->update(['status' => 'preparing'])),
+
+                // Button: Order Ready
+                Tables\Actions\Action::make('mark_ready')
+                    ->label('Ready')
+                    ->icon('heroicon-o-check-circle')
+                    ->color('success')
+                    ->button()
+                    ->visible(fn (Order $record) => $record->status === 'preparing')
+                    ->action(fn (Order $record) => $record->update(['status' => 'ready'])),
+            ]);
+    }
 
     public static function getPages(): array
     {
         return [
             'index' => Pages\ListKitchens::route('/'),
         ];
+    }
+    
+    public static function canCreate(): bool
+    {
+        return false; 
     }
 }
