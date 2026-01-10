@@ -4,7 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\PaymentResource\Pages;
 use App\Models\Order;
-use App\Models\Table as RestaurantTable; // Rename to avoid conflict with Filament Table
+use App\Models\RestaurantTable; // Rename to avoid conflict with Filament Table
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -108,12 +108,12 @@ class PaymentResource extends Resource
                         ]);
 
                         // B. Free up the Table
-                        // if ($record->table_id) {
-                        //     $table = RestaurantTable::find($record->table_id);
-                        //     if ($table) {
-                        //         $table->update(['status' => 'available']);
-                        //     }
-                        // }
+                        if ($record->table_id) {
+                            $table = RestaurantTable::find($record->table_id);
+                            if ($table) {
+                                $table->update(['status' => 'available']);
+                            }
+                        }
 
                         // C. Send Success Notification
                         Notification::make()

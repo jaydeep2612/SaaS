@@ -1,170 +1,113 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useState, useEffect, use } from 'react'; // 👈 Import 'use'
 import axios from 'axios';
-import { useParams, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 
-export default function CustomerMenu() {
-  const params = useParams(); // Get IDs from URL
+export default function CheckInPage({ params }) {
+  // 1. Unwrap params using React.use()
+  const { restaurantId, tableId } = use(params); 
+
   const router = useRouter();
-  
-  const [categories, setCategories] = useState([]);
-  const [cart, setCart] = useState({}); // { itemId: quantity }
+  const [isLoading, setIsLoading] = useState(true);
+  const [status, setStatus] = useState('available');
+  const [occupantName, setOccupantName] = useState('');
   const [customerName, setCustomerName] = useState('');
-  const [isCheckout, setIsCheckout] = useState(false);
 
-  // 1. Fetch Menu on Load
+  // 2. Check Table Status on Load
   useEffect(() => {
-    if(params.restaurantId) {
-      axios.get(`${process.env.NEXT_PUBLIC_API_URL}/customer/menu/${params.restaurantId}`)
-        .then(res => setCategories(res.data))
-        .catch(err => console.error(err));
-    }
-  }, [params.restaurantId]);
+    // Safety check: Ensure IDs exist before calling API
+    if (!tableId || !restaurantId) return; 
 
-  // 2. Add to Cart Logic
-  const addToCart = (itemId) => {
-    setCart(prev => ({ ...prev, [itemId]: (prev[itemId] || 0) + 1 }));
-  };
+    const checkStatus = async () => {
+      try {
+        const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/table/${tableId}/status`);
+        
+        if (res.data.status === 'occupied') {
+          const storedName = localStorage.getItem('customer_name');
+          const storedTable = localStorage.getItem('table_id');
 
-  const removeFromCart = (itemId) => {
-    setCart(prev => {
-      const newCart = { ...prev };
-      if (newCart[itemId] > 1) newCart[itemId]--;
-      else delete newCart[itemId];
-      return newCart;
-    });
-  };
+          if (storedName && storedTable === tableId) {
+            router.push(`/menu/${restaurantId}/${tableId}/order`);
+          } else {
+            setStatus('occupied');
+            setOccupantName(res.data.customer_name);
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching status:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-  // 3. Calculate Total
-  const getTotal = () => {
-    let total = 0;
-    categories.forEach(cat => {
-      cat.menu_items.forEach(item => {
-        if(cart[item.id]) total += item.price * cart[item.id];
-      });
-    });
-    return total;
-  };
+    checkStatus();
+  }, [tableId, restaurantId, router]); // 👈 Dependencies are now safe
 
-  // 4. Place Order Logic
-  const placeOrder = async () => {
-    if(!customerName) return alert("Please enter your name");
-    
-    // Format cart for API
-    const itemsPayload = Object.keys(cart).map(itemId => ({
-      id: itemId,
-      quantity: cart[itemId]
-    }));
+  // 3. Handle Check-In
+  const handleCheckIn = async (e) => {
+    e.preventDefault();
+    if (!customerName.trim()) return;
 
     try {
-      await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/customer/order`, {
-        restaurant_id: params.restaurantId,
-        table_id: params.tableId,
-        customer_name: customerName,
-        items: itemsPayload
+      await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/table/${tableId}/occupy`, {
+        customer_name: customerName
       });
-      alert("Order Placed Successfully! 🍲");
-      setCart({});
-      setIsCheckout(false);
+
+      localStorage.setItem('customer_name', customerName);
+      localStorage.setItem('table_id', tableId);
+      localStorage.setItem('restaurant_id', restaurantId);
+
+      router.push(`/menu/${restaurantId}/${tableId}/order`);
+
     } catch (error) {
-      alert("Failed to place order. Try again.");
+      alert("Failed to check in. Please try again.");
     }
   };
 
+  if (isLoading) return <div className="p-10 text-center">Checking Table Status...</div>;
+
+  if (status === 'occupied') {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen bg-red-50 p-6 text-center">
+        <div className="text-6xl mb-4">🚫</div>
+        <h1 className="text-2xl font-bold text-red-600">Table Occupied</h1>
+        <p className="mt-2 text-gray-600">
+          This table is currently occupied by <strong>{occupantName}</strong>.
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-gray-50 pb-20">
-      {/* Header */}
-      <div className="bg-white p-4 shadow sticky top-0 z-10">
-        <h1 className="text-xl font-bold text-center">🍽️ Digital Menu</h1>
-        <p className="text-center text-sm text-gray-500">Table #{params.tableId}</p>
-      </div>
-
-      {/* Menu List */}
-      <div className="p-4 space-y-6">
-        {categories.map(category => (
-          <div key={category.id}>
-            <h2 className="text-lg font-bold text-gray-800 mb-3 border-l-4 border-orange-500 pl-2">
-              {category.name}
-            </h2>
-            <div className="space-y-4">
-              {category.menu_items.map(item => (
-                <div key={item.id} className="bg-white p-4 rounded-lg shadow flex justify-between items-center">
-                  <div>
-                    <h3 className="font-semibold">{item.name}</h3>
-                    <p className="text-orange-600 font-bold">${item.price}</p>
-                  </div>
-                  
-                  {/* Add Button */}
-                  {cart[item.id] ? (
-                    <div className="flex items-center gap-3 bg-gray-100 rounded-full px-3 py-1">
-                      <button onClick={() => removeFromCart(item.id)} className="text-red-500 font-bold">-</button>
-                      <span className="font-semibold">{cart[item.id]}</span>
-                      <button onClick={() => addToCart(item.id)} className="text-green-600 font-bold">+</button>
-                    </div>
-                  ) : (
-                    <button 
-                      onClick={() => addToCart(item.id)}
-                      className="bg-orange-500 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow hover:bg-orange-600"
-                    >
-                      ADD
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Footer Cart Bar */}
-      {Object.keys(cart).length > 0 && (
-        <div className="fixed bottom-0 w-full bg-white border-t p-4 shadow-lg z-20">
-          <div className="flex justify-between items-center mb-4">
-            <span className="text-lg font-bold">Total: ${getTotal().toFixed(2)}</span>
-            <button 
-              onClick={() => setIsCheckout(true)}
-              className="bg-green-600 text-white px-6 py-2 rounded-lg font-bold shadow-lg"
-            >
-              View Cart & Order
-            </button>
-          </div>
+    <div className="flex flex-col items-center justify-center h-screen bg-gray-50 p-6">
+      <div className="bg-white p-8 rounded-xl shadow-lg w-full max-w-sm">
+        <div className="text-center mb-6">
+          <span className="text-4xl">🍽️</span>
+          <h1 className="text-2xl font-bold mt-3 text-gray-800">Welcome!</h1>
+          <p className="text-gray-500 text-sm">Please enter your name to begin.</p>
         </div>
-      )}
 
-      {/* Checkout Modal */}
-      {isCheckout && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl w-full max-w-sm p-6">
-            <h2 className="text-xl font-bold mb-4">Confirm Order</h2>
-            
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Your Name</label>
-              <input 
-                type="text" 
-                value={customerName}
-                onChange={(e) => setCustomerName(e.target.value)}
-                placeholder="Enter your name"
-                className="w-full border p-2 rounded"
-              />
-            </div>
-
-            <div className="flex gap-3">
-              <button 
-                onClick={() => setIsCheckout(false)}
-                className="flex-1 bg-gray-200 py-2 rounded-lg font-semibold"
-              >
-                Cancel
-              </button>
-              <button 
-                onClick={placeOrder}
-                className="flex-1 bg-green-600 text-white py-2 rounded-lg font-semibold"
-              >
-                Place Order
-              </button>
-            </div>
+        <form onSubmit={handleCheckIn}>
+          <div className="mb-4">
+            <label className="block text-gray-700 text-sm font-bold mb-2">Your Name</label>
+            <input 
+              type="text" 
+              className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder=""
+              value={customerName}
+              onChange={(e) => setCustomerName(e.target.value)}
+              required
+            />
           </div>
-        </div>
-      )}
+          
+          <button 
+            type="submit" 
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition duration-200"
+          >
+            Start Ordering 🚀
+          </button>
+        </form>
+      </div>
     </div>
   );
 }

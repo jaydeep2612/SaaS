@@ -59,6 +59,10 @@ class RestaurantTablesResource extends Resource
                     ->sortable()
                     ->searchable(),
 
+                Tables\Columns\TextColumn::make('status')
+                    ->label('Avaibility')
+                    ->sortable(),
+
                 Tables\Columns\TextColumn::make('restaurant.name')
                     ->visible(fn () => auth()->user()->role === 'super_admin')
                     ->label('Restaurant'),
